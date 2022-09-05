@@ -4,7 +4,7 @@ import pickle
 import numpy as np
 import matplotlib.pyplot as plt
 import copy
-from config import argparser
+from common.config import argparser
 import math
 import os
 #%%

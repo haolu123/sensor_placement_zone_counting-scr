@@ -1,8 +1,8 @@
 #%%
 import pickle
-from A_star import Env, AStar, Env_sensor_coverage
-from config import argparser
-from read_labeled_floor_plan import Get_BaseColor,Label_gridFloorPlan,get_grid_width
+from common.A_star import Env, AStar, Env_sensor_coverage
+from common.config import argparser
+from common.read_labeled_floor_plan import Get_BaseColor,Label_gridFloorPlan,get_grid_width
 import tqdm
 import matplotlib.pyplot as plt
 import numpy as np
@@ -260,7 +260,7 @@ def get_all_matrix(args, fp_grid, bound_slices, path_all, grid_width):
 
     return b, P, G, b_mid, P_sliced
 
-def ILP_solver(n, n_p, G, P, b_mid, b, result_same_name):
+def ILP_solver(args, n, n_p, G, P, b_mid, b, result_same_name):
     G[G == -1] = 0
     G = G.T
 
@@ -391,7 +391,7 @@ if __name__ == '__main__':
     # print(b_mid)
     # print(b)
     # print(f_name)
-    sesor_placement = ILP_solver(n, n_p, G, P_matrix, b_mid, b, f_name)
+    sesor_placement = ILP_solver(args, n, n_p, G, P_matrix, b_mid, b, f_name)
     for i in sesor_placement:
         plt.imshow(10*i.reshape(fp_grid.shape)+fp_grid)
         plt.show()
