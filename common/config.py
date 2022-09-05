@@ -21,7 +21,7 @@ argparser.add_argument('--use_saved_base_color', type=bool, default=True, help='
 argparser.add_argument('--save_hotmap', type=bool, default=True, help='Save hotmap or not?')
 argparser.add_argument('--save_temp_result', type=bool, default=True, help='Save temp_result or not?')
 argparser.add_argument('--save_unity3d_result', type=bool, default=True, help='Save result for unity3d or not?')
-
+argparser.add_argument('--slice_path', type=bool, default=True, help="where sliced the pathes around the doorways or not")
 
 # argparser.add_argument('--train_file', type=str, default='../../social-interactions/data/split/train.list', help='Train list')
 # argparser.add_argument('--val_file', type=str, default='../../social-interactions/data/split/val.list', help='Validation list')

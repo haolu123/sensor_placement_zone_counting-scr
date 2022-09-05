@@ -1,0 +1,5 @@
+{
+    "python.condaPath": "C:\\Users\\Admin\\Anaconda3\\Scripts\\conda.exe",
+    "python.terminal.activateEnvironment": true,
+    "terminal.integrated.defaultProfile.windows": "Command Prompt"
+}
