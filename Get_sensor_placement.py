@@ -1,8 +1,78 @@
+from re import T
 from common.config import argparser
 from common.read_labeled_floor_plan import Get_BaseColor,Label_gridFloorPlan,get_grid_width
 from common.engine import get_all_matrix, ILP_solver, A_star_simulation
 import pickle,os
 import matplotlib.pyplot as plt
+import numpy as np
+
+def output_gt_for_evaluations(args, fp_grid_groundtruth):
+    fp_grid_groundtruth = fp_grid_groundtruth - 6
+    fp_grid_groundtruth[fp_grid_groundtruth < 0] = 0
+
+    os.makedirs(args.unity_data_dir, exist_ok=True)
+    output_folder = args.unity_data_dir + args.environmnet_id + '/'
+    os.makedirs(output_folder, exist_ok=True)
+
+    # save area of zone_ground_truth
+    idx_zone = 1
+    i_max = int(fp_grid_groundtruth.max())
+    
+    for idx_zone in range(1,i_max+1):
+        zone_i_where = np.where(fp_grid_groundtruth==idx_zone)
+        
+        # save ground truth of zone division
+        zone_i_list = np.zeros((zone_i_where[0].shape[0],2))
+        for i in range(zone_i_where[0].shape[0]):
+            zone_i_list[i,:] = [zone_i_where[0][i],zone_i_where[1][i]]
+        zone_i_list = zone_i_list - np.array(fp_grid_groundtruth.shape)//2
+        with open(output_folder + "fp_grid_zone_%s.txt" %str(idx_zone), 'w+') as f:
+            f.write("numZoneGrids,%d" % zone_i_where[0].shape[0])
+        with open(output_folder + "fp_grid_zone_%s.txt" %str(idx_zone), "ab") as f:
+            f.write(b"\n")
+            np.savetxt(f, zone_i_list, fmt='%d',delimiter=',')
+
+    # save number of zone_division
+    with open(output_folder + 'zone_num.pickle', 'wb') as f:
+        pickle.dump(i_max, f)
+
+    return
+
+def save_placement_result(sensor_placement, P,b):
+
+    os.makedirs(args.unity_data_dir, exist_ok=True)
+    output_folder = args.unity_data_dir + args.environmnet_id + '/'
+    os.makedirs(output_folder, exist_ok=True)
+
+    # save ground truth of sensor placement
+    for sensor_num in range(len(sensor_placement)):
+        sensor_i = sensor_placement[sensor_num].reshape(fp_grid.shape)
+        sensor_where = np.where(sensor_i!=0)
+        sensor_list = np.zeros((sensor_where[0].shape[0],2))
+        for i in range(sensor_where[0].shape[0]):
+            sensor_list[i,:] = [sensor_where[0][i],sensor_where[1][i]]
+        sensor_list = sensor_list - np.array(fp_grid.shape)//2
+        
+        with open(output_folder + "sensor_placement_%s.txt" %str(sensor_num+1), 'w+') as f:
+            f.write("sensorNum,%d" % sensor_where[0].shape[0])
+            
+        with open(output_folder + "sensor_placement_%s.txt" %str(sensor_num+1), "ab") as f:
+            f.write(b"\n")
+            np.savetxt(f, sensor_list, fmt='%d',delimiter=',')
+    
+    # save cover rate
+    cover_rate = []
+    for i in range(len(sensor_placement)):
+        cover =  (P @ np.diag((b.T @ P).flatten()) ).T @ G @ sensor_placement[i]
+        cover_rate_i = np.sum(cover!=0)/np.sum(b.T @ P!=0)
+        
+        cover_rate.append(cover_rate_i)
+    
+    print(cover_rate)
+    with open(output_folder + "cover_rate.pickle", 'wb') as f:
+        pickle.dump(cover_rate, f)
+    
+    return
 
 if __name__ == '__main__':
     args = argparser.parse_args()
@@ -81,7 +151,10 @@ if __name__ == '__main__':
     # print(b_mid)
     # print(b)
     # print(f_name)
-    sesor_placement = ILP_solver(args, n, n_p, G, P_matrix, b_mid, b, f_name)
-    for i in sesor_placement:
+    sensor_placement = ILP_solver(args, n, n_p, G, P_matrix, b_mid, b, f_name)
+    for i in sensor_placement:
         plt.imshow(10*i.reshape(fp_grid.shape)+fp_grid)
         plt.show()
+
+    output_gt_for_evaluations(args, fp_grid_gt)
+    save_placement_result(sensor_placement, P,b)
