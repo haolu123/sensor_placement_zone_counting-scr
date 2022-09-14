@@ -251,14 +251,29 @@ class AStar:
         
         if s_goal in self.doorway:
             cost += doorway_penalty
-            
-        s_goal_neigh = self.get_neighbor(s_start)
-        for i in s_goal_neigh:
-            if i in self.obs:
-                cost += wall_penalty
+        
+        wall_distance = self.min_distance_to_wall(s_goal)
+        cost += 1/(wall_distance**2) * wall_penalty
+
+        # s_goal_neigh = self.get_neighbor(s_start)
+        # for i in s_goal_neigh:
+        #     if i in self.obs:
+        #         cost += wall_penalty
         
         
         return cost
+    
+    def min_distance_to_wall(self,point):
+        """
+        """
+        detect_dir = [(0,1),(1,0),(-1,0),(0,-1),(1,1),(1,-1),(-1,1),(-1,-1)]
+        for i in range(10):
+            for j in detect_dir:
+                x = i*j[0] + point[0]
+                y = i*j[1] + point[1]
+                if (x,y) in self.obs:
+                    return i
+        return 10
 
     def is_collision(self, s_start, s_end):
         """

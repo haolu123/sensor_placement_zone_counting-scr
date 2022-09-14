@@ -1,4 +1,3 @@
-from re import T
 from common.config import argparser
 from common.read_labeled_floor_plan import Get_BaseColor,Label_gridFloorPlan,get_grid_width
 from common.engine import get_all_matrix, ILP_solver, A_star_simulation
@@ -6,12 +5,53 @@ import pickle,os
 import matplotlib.pyplot as plt
 import numpy as np
 
+def output_for_unity(args, fp_grid):
+    os.makedirs(args.unity_requirement_dir, exist_ok=True)
+    output_folder = args.unity_requirement_dir + args.environmnet_id + '/'
+    os.makedirs(output_folder, exist_ok=True)
+
+    # save the walls
+    walls = np.where(fp_grid == 1)
+    wall_list = np.zeros((walls[0].shape[0],2))
+    for i in range(walls[0].shape[0]):
+        wall_list[i,:] = [walls[0][i], walls[1][i]]
+    wall_list = wall_list - np.array(fp_grid.shape)//2
+    with open(output_folder + 'fp_grid_walls.txt','w+') as f:
+        f.write("numWall,%d" % walls[0].shape[0])
+    with open(output_folder + 'fp_grid_walls.txt','ab') as f:
+        f.write(b'\n')
+        np.savetxt(f, wall_list, fmt='%d', delimiter=',')
+
+    # save the obstacles
+    obstacles = np.where(fp_grid == 2)
+    obstacle_list = np.zeros((obstacles[0].shape[0],2))
+    for i in range(obstacles[0].shape[0]):
+        obstacle_list[i,:] = [obstacles[0][i], obstacles[1][i]]
+    obstacle_list = obstacle_list - np.array(fp_grid.shape)//2
+    with open(output_folder + 'fp_grid_obstacles.txt','w+') as f:
+        f.write("numWall,%d" % obstacles[0].shape[0])
+    with open(output_folder + 'fp_grid_obstacles.txt','ab') as f:
+        f.write(b'\n')
+        np.savetxt(f, obstacle_list, fmt='%d', delimiter=',')
+    
+    # save the area of interest
+    AoI = np.where(fp_grid == 4)
+    AoI_list = np.zeros((AoI[0].shape[0],2))
+    for i in range(AoI[0].shape[0]):
+        AoI_list[i,:] = [AoI[0][i], AoI[1][i]]
+    AoI_list = AoI_list - np.array(fp_grid.shape)//2
+    with open(output_folder + 'fp_grid_interest.txt','w+') as f:
+        f.write("numInterest,%d" % AoI[0].shape[0])
+    with open(output_folder + 'fp_grid_interest.txt','ab') as f:
+        f.write(b'\n')
+        np.savetxt(f, AoI_list, fmt='%d', delimiter=',')
+
 def output_gt_for_evaluations(args, fp_grid_groundtruth):
     fp_grid_groundtruth = fp_grid_groundtruth - 6
     fp_grid_groundtruth[fp_grid_groundtruth < 0] = 0
 
-    os.makedirs(args.unity_data_dir, exist_ok=True)
-    output_folder = args.unity_data_dir + args.environmnet_id + '/'
+    os.makedirs(args.unity_requirement_dir, exist_ok=True)
+    output_folder = args.unity_requirement_dir + args.environmnet_id + '/'
     os.makedirs(output_folder, exist_ok=True)
 
     # save area of zone_ground_truth
@@ -38,10 +78,10 @@ def output_gt_for_evaluations(args, fp_grid_groundtruth):
 
     return
 
-def save_placement_result(sensor_placement, P,b):
+def save_placement_result(args,sensor_placement,fp_grid, P,b, G):
 
-    os.makedirs(args.unity_data_dir, exist_ok=True)
-    output_folder = args.unity_data_dir + args.environmnet_id + '/'
+    os.makedirs(args.unity_requirement_dir, exist_ok=True)
+    output_folder = args.unity_requirement_dir + args.environmnet_id + '/'
     os.makedirs(output_folder, exist_ok=True)
 
     # save ground truth of sensor placement
@@ -74,7 +114,36 @@ def save_placement_result(sensor_placement, P,b):
     
     return
 
-if __name__ == '__main__':
+def get_fp_grid(args, fp_zone_fn = 'fp1_zone.png', fp_code_fn='fp1_code.png', baseColor_fn = 'baseColor.png'):
+    base_color_fig_name = args.data_dir + baseColor_fn
+    floor_plan_zone_fig_name = args.data_dir + fp_zone_fn
+    floor_plan_code_fig_name = args.data_dir + fp_code_fn
+
+    room_width = args.room_width
+    room_length = args.room_length
+    grid_width = get_grid_width(room_width, room_length)
+
+    # get base color
+    flag = os.path.exists(args.temp_result_dir+'baseColor.pickle')
+    if args.use_saved_base_color and os.path.exists(args.temp_result_dir+'baseColor.pickle'):
+        with open(args.temp_result_dir+'baseColor.pickle', 'rb') as f:
+            baseColor = pickle.load(f)
+    else:
+        baseColor = Get_BaseColor(base_color_fig_name, args.temp_result_dir + 'baseColor.pickle', 16)
+    
+    # get fp_grid
+    flag = os.path.exists(args.temp_result_dir + 'fp_grid.pickle')
+    if args.use_save_temp_result and os.path.exists(args.temp_result_dir + 'fp_grid.pickle'):
+        with open(args.temp_result_dir + 'fp_grid.pickle','rb') as f:
+            fp_grid = pickle.load(f)
+        with open(args.temp_result_dir + 'fp_grid_groundtruth.pickle','rb') as f:
+            fp_grid_gt = pickle.load(f)
+    else:
+        fp_grid, fp_grid_gt =  Label_gridFloorPlan(floor_plan_code_fig_name, floor_plan_zone_fig_name, room_width, room_length, grid_width, args.temp_result_dir, baseColor)
+    
+    return fp_grid, fp_grid_gt
+
+def run ():
     args = argparser.parse_args()
     data_dir = args.data_dir
     tempdir  = args.temp_result_dir
@@ -96,7 +165,7 @@ if __name__ == '__main__':
     
     # get fp_grid
     flag = os.path.exists(tempdir + 'fp_grid.pickle')
-    if args.save_temp_result and os.path.exists(tempdir + 'fp_grid.pickle'):
+    if args.use_save_temp_result and os.path.exists(tempdir + 'fp_grid.pickle'):
         with open(args.temp_result_dir + 'fp_grid.pickle','rb') as f:
             fp_grid = pickle.load(f)
         # with open(args.temp_result_dir + 'fp_grid_groundtruth.pickle','rb') as f:
@@ -106,7 +175,7 @@ if __name__ == '__main__':
     
     # get simulation results
     flag = os.path.exists(tempdir + 'path_all.pickle')
-    if args.save_temp_result and os.path.exists(tempdir + 'path_all.pickle'):
+    if args.use_save_temp_result and os.path.exists(tempdir + 'path_all.pickle'):
         with open(tempdir + 'path_all.pickle', 'rb') as f:
             path_all = pickle.load(f)
         with open(tempdir+'bound_slices.pickle', 'rb') as f:
@@ -116,7 +185,7 @@ if __name__ == '__main__':
 
     # get constant matrixes for ILP
     flag = os.path.exists(tempdir + 'b_matrix_2.pickle')
-    if args.save_temp_result and os.path.exists(tempdir + 'b_matrix_2.pickle'):
+    if args.use_save_temp_result and os.path.exists(tempdir + 'b_matrix_2.pickle'):
          # save b
         with open(args.temp_result_dir + 'b_matrix_2.pickle','rb') as file:
             b = pickle.load(file)
@@ -155,6 +224,9 @@ if __name__ == '__main__':
     for i in sensor_placement:
         plt.imshow(10*i.reshape(fp_grid.shape)+fp_grid)
         plt.show()
+    output_for_unity(args, fp_grid)
+    # output_gt_for_evaluations(args, fp_grid_gt)
+    # save_placement_result(sensor_placement, P,b)
 
-    output_gt_for_evaluations(args, fp_grid_gt)
-    save_placement_result(sensor_placement, P,b)
+if __name__ == '__main__':
+    run()
