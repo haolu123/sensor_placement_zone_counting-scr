@@ -86,7 +86,7 @@ def Get_sensor_placement_pack(args, sensor_num):
     sensor_place = Get_sensor_placement(file_name)
     return sensor_place
 
-def Get_detected_people(sensor_place, frame_num, sensor_radius):
+def Get_detected_people(sensor_place, frame_num, sensor_radius, human_num, people_list):
     people_detected = []
     for i in range(frame_num):
         temp_detected = []
@@ -115,7 +115,7 @@ def Get_zone_label_for_detected_people(frame_num, human_num, people_detected, zo
         see_people.append(temp_see)
     return see_people
 
-def Zone_counting(zone_count_init, see_people_list, zone_num, frame_num, human_num, sensor_num):
+def Zone_counting(zone_count_init, see_people_list, zone_num, frame_num, human_num, sensor_num, people_detected, b_mid):
     zone_count = np.zeros(zone_num+1)
     zone_count[:zone_num] = zone_count_init
     see_people = np.array(copy.deepcopy(see_people_list))
@@ -196,50 +196,52 @@ def CCR_wcc_compute(window_size, count_act_gt, count_act_est, frame_num):
     print(TP/all_event)
     CCR_wcc = TP/all_event
     return CCR_wcc
+def run():
+    args = argparser.parse_args()
+    human_num = args.human_num
+    sensor_radius = 8
+    # determine the frame_num
+    frame_num = Get_frame_num(args)
 
-args = argparser.parse_args()
-human_num = args.human_num
-sensor_radius = 8
-# determine the frame_num
-frame_num = Get_frame_num(args)
+    # Get the position ground truth of all persons
+    people_list, people_list_int = Get_position_gt(args,frame_num)
 
-# Get the position ground truth of all persons
-people_list, people_list_int = Get_position_gt(args,frame_num)
+    # read ground truth of zone grids. [the ground truth of zone division should get from sensor_labeling part, need change here and the Get_sensor_placement part]
+    zone_grids_dict, zone_num = Get_zone_division_gt(args)
 
-# read ground truth of zone grids. [the ground truth of zone division should get from sensor_labeling part, need change here and the Get_sensor_placement part]
-zone_grids_dict, zone_num = Get_zone_division_gt(args)
+    # get the ground truth of which zone the people are.
+    GT_people = Get_people_zone_label(frame_num, human_num, people_list_int, zone_grids_dict)
 
-# get the ground truth of which zone the people are.
-GT_people = Get_people_zone_label(frame_num, human_num, people_list_int, zone_grids_dict)
+    # get the zone counting ground truth
+    GT_zone_count, GT_count_activation = Get_zone_count_gt(GT_people, zone_num, human_num, frame_num)
 
-# get the zone counting ground truth
-GT_zone_count, GT_count_activation = Get_zone_count_gt(GT_people, zone_num, human_num, frame_num)
+    CCR_wcc_list = []
+    for sensor_num in range(1,7): # will change to for loop later
 
-CCR_wcc_list = []
-for sensor_num in range(1,7): # will change to for loop later
+        # get_sensor_placement: input: number of sensor
+        sensor_placement = Get_sensor_placement_pack(args, sensor_num)
 
-    # get_sensor_placement: input: number of sensor
-    sensor_placement = Get_sensor_placement_pack(args, sensor_num)
+        # get_detected people: input: sensor_placement, sensor_radius
+        people_detected = Get_detected_people(sensor_placement, frame_num, sensor_radius, human_num, people_list)
 
-    # get_detected people: input: sensor_placement, sensor_radius
-    people_detected = Get_detected_people(sensor_placement, frame_num, sensor_radius)
+        # get detected zone id
+        see_people = Get_zone_label_for_detected_people(frame_num, human_num, people_detected, zone_grids_dict)
 
-    # get detected zone id
-    see_people = Get_zone_label_for_detected_people(frame_num, human_num, people_detected, zone_grids_dict)
+        # get mid point of boundary
+        b_mid = read_b_mid(args.unity_data_dir + args.environmnet_id + '/' + 'b_mid.txt')
+        # zone count
+        count_activation = Zone_counting(GT_zone_count[0], see_people, zone_num, frame_num, human_num, sensor_num, people_detected, b_mid)
 
-    # get mid point of boundary
-    b_mid = read_b_mid(args.unity_data_dir + args.environmnet_id + '/' + 'b_mid.txt')
-    # zone count
-    count_activation = Zone_counting(GT_zone_count[0], see_people, zone_num, frame_num, human_num, sensor_num)
+        # CCR_wcc
+        CCR_wcc = CCR_wcc_compute(50, GT_count_activation, count_activation, frame_num)
+        CCR_wcc_list.append(CCR_wcc)
 
-    # CCR_wcc
-    CCR_wcc = CCR_wcc_compute(50, GT_count_activation, count_activation, frame_num)
-    CCR_wcc_list.append(CCR_wcc)
-
-x = [i+1 for i in range(6)]
-plt.plot(x, CCR_wcc_list,'bs', label = "classification correct rate")
-plt.xlabel("sensor number")
-plt.ylabel("percentage")
-plt.title("sensor coverage and classification correct rate VS sensor numbers")
-plt.legend()
-plt.show()
+    x = [i+1 for i in range(6)]
+    plt.plot(x, CCR_wcc_list,'bs', label = "classification correct rate")
+    plt.xlabel("sensor number")
+    plt.ylabel("percentage")
+    plt.title("sensor coverage and classification correct rate VS sensor numbers")
+    plt.legend()
+    plt.show()
+if __name__ == '__main__':
+    run()

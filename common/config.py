@@ -12,7 +12,7 @@ argparser.add_argument('--room_width', type=float, default=500*1.1, help='the re
 argparser.add_argument('--room_length', type=float, default=2200*1.1, help='the real length of the room (cm)')
 
 # A* parameters
-argparser.add_argument('--random_obstacle_dense', type=float, default=0.2, help='the dense of random obstacles in blank space')
+argparser.add_argument('--random_obstacle_dense', type=float, default=0.1, help='the dense of random obstacles in blank space')
 argparser.add_argument('--doorway_penalty', type=float, default=50, help='door way penalty')
 argparser.add_argument('--wall_penalty', type=float, default=20, help='penalty close to the wall'  )
 argparser.add_argument('--path_num', type=float, default=1000, help='how many paths will simulate with A* algorithm')

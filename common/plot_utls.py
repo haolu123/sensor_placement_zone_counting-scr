@@ -1,7 +1,10 @@
+
 import matplotlib.pyplot as plt
 import numpy as np
 from common.A_star import Env, AStar
 from common.config import argparser
+import matplotlib.patches as patches
+from PIL import Image
 
 class result_plot(AStar):
     def __init__(self, fp_grid, s_start, s_goal, heuristic_type, Env, color_map = {0:[255,255,255],1:[0,0,0],2:[0,0,0],3:[255,255,0],4:[255,0,0],5:[255,255,255], 6:[128,128,128], 7:[0,0,204]}):
@@ -61,3 +64,35 @@ class result_plot(AStar):
         plt.show()
 
     
+def plot_sensor_placement(fp_grid, grid_width, fp_img_name, sensor_placement):
+    
+    # read floor plan image
+    img = Image.open(fp_img_name)
+
+    # create figure and axes
+    fig, ax = plt.subplots()
+
+    ax.imshow(img)
+
+    img = np.array(img)
+    # compute the scale
+    x_scale = img.shape[0]/fp_grid.shape[0]
+    y_scale = img.shape[1]/fp_grid.shape[1]
+    
+    # compute rectangle size (cm)
+    pixel_width = grid_width/((x_scale + y_scale)/2)
+    rectangle_size = int(210 / pixel_width)
+
+    # compute the sensor pixel position
+    # point_list = []
+    for i in sensor_placement:
+        x = int(i[0] * x_scale - 0.5*rectangle_size)
+        y = int(i[1] * y_scale - 0.5*rectangle_size)
+        # point_list.append([x,y])
+    
+        rect = patches.Rectangle((y,x), rectangle_size,rectangle_size,linewidth=1, edgecolor='r', facecolor='none')
+        ax.add_patch(rect)
+    fig.show()
+    plt.show()
+   
+

@@ -9,13 +9,13 @@ import numpy as np
 import os
 import copy
 import cvxpy as cp
-
-def A_star_simulation(args, fp_grid, grid_width):
+import math
+def A_star_simulation(args, fp_grid, grid_width, range_b):
 
     walk_freq_map = np.zeros(fp_grid.shape)
     # build enviroment for A* algorithm
     fp_env = Env(fp_grid)
-    bound_slices = fp_env.get_boundary_areas(grid_width)
+    bound_slices, b_mid = fp_env.get_boundary_areas(grid_width, range_b)
 
     # begin simulation
     path_all = []
@@ -103,9 +103,9 @@ def A_star_simulation(args, fp_grid, grid_width):
         # with open(r"..\..\Unity3d\AutoFloorPlan\Assets\fp_grid_interest.txt", "ab") as f:
         #     f.write(b"\n")
         #     np.savetxt(f, area_interest_list, fmt='%d',delimiter=',')
-    return path_all, bound_slices
+    return path_all, bound_slices, b_mid
 
-def get_all_matrix(args, fp_grid, bound_slices, path_all, grid_width):
+def get_all_matrix(args, fp_grid, bound_slices, path_all, grid_width, b_mid_list):
 
     print("begin to get all metrix")
     fp_grid_bound = copy.deepcopy(fp_grid)
@@ -209,13 +209,12 @@ def get_all_matrix(args, fp_grid, bound_slices, path_all, grid_width):
     G = G.reshape(x_range*y_range, x_range*y_range).astype(np.int8)
     
     # get b_mid
-    bound_mid_point = []
+
     b_mid = np.zeros(b.shape)
     
-    for i in range(len(bound_slices)):
-        x_mid = (bound_slices[i][0] + bound_slices[i][2])//2
-        y_mid = (bound_slices[i][1] + bound_slices[i][3])//2
-        bound_mid_point.append([x_mid,y_mid])
+    for i in range(len(b_mid_list)):
+        x_mid = int(b_mid_list[i][0])
+        y_mid = int(b_mid_list[i][1])
         b_mid[y_mid*fp_grid.shape[1]+x_mid] = 1
     
     
@@ -313,6 +312,82 @@ def ILP_solver(args, n, n_p, G, P, b_mid, b, result_same_name):
             pickle.dump(sensor_placement,f)
     
     return sensor_placement
+
+def get_b_mid_d_matrix(b_mid_list, fp_grid):
+    bmd_shape = [fp_grid.shape[0],fp_grid.shape[1],len(b_mid_list)]
+    bmd_temp = np.zeros(bmd_shape)
+    for i in range(len(b_mid_list)):
+        x = b_mid_list[i][1]
+        y = b_mid_list[i][0]
+        for j in range(bmd_shape[0]):
+            for k in range(bmd_shape[1]):
+                bmd_temp[j,k,i] = math.sqrt((j-x)**2+(k-y)**2)
+    bmd = np.min(bmd_temp, axis=2)
+    bmd[bmd<5] = 0
+    # bm = np.zeros(bmd_shape[:2])
+    # for i in range(len(b_mid_list)):
+    #     x = int(b_mid_list[i][1])
+    #     y = int(b_mid_list[i][0])
+    #     bm[x,y] = 100
+
+    # plt.imshow(bmd+bm+fp_grid)
+    # plt.show()
+    return bmd
+
+def ILP_solver_bmd(args,alpha,beta, n, n_p, G, P, b_mid, b,bmd, result_same_name):
+    G[G == -1] = 0
+    G = G.T
+    bmd_view = bmd.reshape((-1,1))
+    sensor_placement = []
+    x_initial = np.concatenate((b_mid, np.ones((n_p,1))), axis=0)
+    m = n+n_p
+    x = cp.Variable(m, boolean = True)
+    x.value = x_initial.reshape(-1)
+    
+    gamma = cp.Parameter(nonneg=True)
+    gamma_vals = np.array([1,2,3,4,5,6])
+    
+    # objective weights
+    # f = -np.concatenate((-np.ones((1,n)), np.ones((1,n_p))), axis = 1).T
+    
+    # constrains weights A
+    temp_m = (P @ np.diag((b.T @ P).flatten()) ).T @ G
+    temp_line_1 = np.concatenate((np.ones((1,n)), np.zeros((1,n_p))),axis = 1)
+    temp_line_2 = np.concatenate((-temp_m, np.eye(n_p)),axis = 1)
+    # A = np.concatenate((temp_line_1, temp_line_2), axis = 0)
+    A = temp_line_2
+    
+    # sensor number k
+    # k = 4
+    
+    # constrains bias B
+    # B = np.concatenate((np.array([k]).reshape((1,1)), np.zeros((1,n_p))),axis=1).T
+    B = np.zeros((1,n_p)).T
+    print(np.concatenate((bmd_view.T,np.zeros((1,n_p))), axis = 1).shape)
+    # objective : min sensor number, maximum sensor coverage, minimum distance to boundary mid
+    objective = alpha*np.concatenate((bmd_view.T,np.zeros((1,n_p))), axis = 1) @ x + beta*np.concatenate((np.ones((1,n)),np.zeros((1,n_p))), axis = 1) @ x - np.concatenate((np.zeros((1,n)),np.ones((1,n_p))), axis = 1) @ x
+
+    constrains = []
+    for i in range(len(A)):
+        constrains.append(A[i] @ x <= B[i])
+    constrains.append(temp_line_1 @ x <= gamma)
+    
+    
+    problem = cp.Problem(cp.Minimize(objective), constrains)
+    
+    for val in gamma_vals:
+        gamma.value = val
+        problem.solve(solver = 'CBC',verbose=True, warm_start = False, maximumSeconds=4000)
+        sensor_placement.append(x.value[:n])
+    
+        # plt.imshow(10*x.value[:n].reshape(fp_grid.shape)+fp_grid)
+        # plt.pause(0.1)
+
+    if args.save_temp_result:
+        with open(args.temp_result_dir + result_same_name, 'wb') as f:
+            pickle.dump(sensor_placement,f)
+    
+    return sensor_placement   
 #%%
 if __name__ == '__main__':
     args = argparser.parse_args()

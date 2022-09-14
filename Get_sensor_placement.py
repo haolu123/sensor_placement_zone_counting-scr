@@ -1,6 +1,6 @@
 from common.config import argparser
 from common.read_labeled_floor_plan import Get_BaseColor,Label_gridFloorPlan,get_grid_width
-from common.engine import get_all_matrix, ILP_solver, A_star_simulation
+from common.engine import get_all_matrix, ILP_solver, A_star_simulation, get_b_mid_d_matrix, ILP_solver_bmd
 import pickle,os
 import matplotlib.pyplot as plt
 import numpy as np
@@ -46,12 +46,12 @@ def output_for_unity(args, fp_grid):
         f.write(b'\n')
         np.savetxt(f, AoI_list, fmt='%d', delimiter=',')
 
-def output_gt_for_evaluations(args, fp_grid_groundtruth):
+def output_gt_for_evaluations(args, fp_grid_groundtruth, b_mid_list):
     fp_grid_groundtruth = fp_grid_groundtruth - 6
     fp_grid_groundtruth[fp_grid_groundtruth < 0] = 0
 
-    os.makedirs(args.unity_requirement_dir, exist_ok=True)
-    output_folder = args.unity_requirement_dir + args.environmnet_id + '/'
+    os.makedirs(args.unity_data_dir, exist_ok=True)
+    output_folder = args.unity_data_dir + args.environmnet_id + '/'
     os.makedirs(output_folder, exist_ok=True)
 
     # save area of zone_ground_truth
@@ -76,12 +76,23 @@ def output_gt_for_evaluations(args, fp_grid_groundtruth):
     with open(output_folder + 'zone_num.pickle', 'wb') as f:
         pickle.dump(i_max, f)
 
+    b_mid_list_save = np.zeros((len(b_mid_list),2))
+    for i in range(len(b_mid_list)):
+        b_mid_list_save[i,:] = [b_mid_list[i][1],b_mid_list[i][0]]
+
+    b_mid_list_save = b_mid_list_save - np.array(fp_grid_groundtruth.shape)//2
+    print(b_mid_list_save)
+    with open(output_folder + "b_mid.txt", 'w+') as f:
+            f.write("numBound,%d" % zone_i_where[0].shape[0])
+    with open(output_folder + "b_mid.txt" , "ab") as f:
+        f.write(b"\n")
+        np.savetxt(f, b_mid_list_save, fmt='%d',delimiter=',')
     return
 
 def save_placement_result(args,sensor_placement,fp_grid, P,b, G):
 
-    os.makedirs(args.unity_requirement_dir, exist_ok=True)
-    output_folder = args.unity_requirement_dir + args.environmnet_id + '/'
+    os.makedirs(args.unity_data_dir, exist_ok=True)
+    output_folder = args.unity_data_dir + args.environmnet_id + '/'
     os.makedirs(output_folder, exist_ok=True)
 
     # save ground truth of sensor placement
@@ -168,8 +179,8 @@ def run ():
     if args.use_save_temp_result and os.path.exists(tempdir + 'fp_grid.pickle'):
         with open(args.temp_result_dir + 'fp_grid.pickle','rb') as f:
             fp_grid = pickle.load(f)
-        # with open(args.temp_result_dir + 'fp_grid_groundtruth.pickle','rb') as f:
-        #     fp_grid_zone = pickle.load(f)
+        with open(args.temp_result_dir + 'fp_grid_groundtruth.pickle','rb') as f:
+            fp_grid_gt = pickle.load(f)
     else:
         fp_grid, fp_grid_gt =  Label_gridFloorPlan(floor_plan_code_fig_name, floor_plan_zone_fig_name, room_width, room_length, grid_width, tempdir, baseColor)
     
@@ -180,8 +191,15 @@ def run ():
             path_all = pickle.load(f)
         with open(tempdir+'bound_slices.pickle', 'rb') as f:
             bound_slices = pickle.load(f)
+        with open(tempdir + 'b_mid_list.pickle', 'rb') as f:
+            b_mid_list = pickle.load(f)
     else:
-        path_all, bound_slices = A_star_simulation(args, fp_grid, grid_width)
+        path_all, bound_slices,b_mid_list = A_star_simulation(args, fp_grid, grid_width, range_b=200)
+        with open(tempdir + 'b_mid_list.pickle', 'wb') as f:
+            pickle.dump(b_mid_list,f)
+    # print(b_mid_list)
+    # print(fp_grid.shape)
+    # print(bound_slices)
 
     # get constant matrixes for ILP
     flag = os.path.exists(tempdir + 'b_matrix_2.pickle')
@@ -202,7 +220,7 @@ def run ():
         with open(args.temp_result_dir + 'P_sliced.pickle','rb') as file:
             P_sliced = pickle.load(file)
     else:
-        b, P, G, b_mid, P_sliced = get_all_matrix(args, fp_grid, bound_slices, path_all, grid_width)
+        b, P, G, b_mid, P_sliced = get_all_matrix(args, fp_grid, bound_slices, path_all, grid_width, b_mid_list)
 
     # ILP
     if args.slice_path:
@@ -220,13 +238,31 @@ def run ():
     # print(b_mid)
     # print(b)
     # print(f_name)
-    sensor_placement = ILP_solver(args, n, n_p, G, P_matrix, b_mid, b, f_name)
+    bmd = get_b_mid_d_matrix(b_mid_list, fp_grid)
+    sensor_placement = ILP_solver_bmd(args, 0.00001,0.01, n, n_p, G, P_matrix, b_mid, b,bmd, f_name)
+
+    #sensor_placement = ILP_solver(args, n, n_p, G, P_matrix, b_mid, b, f_name)
     for i in sensor_placement:
         plt.imshow(10*i.reshape(fp_grid.shape)+fp_grid)
         plt.show()
+    
+    os.makedirs(args.result_dir, exist_ok=True)
+    with open(args.result_dir+'sensor_placement.pickle','wb') as f:
+        pickle.dump(sensor_placement,f)
+
     output_for_unity(args, fp_grid)
-    # output_gt_for_evaluations(args, fp_grid_gt)
-    # save_placement_result(sensor_placement, P,b)
+    print(b_mid_list)
+    print(fp_grid.shape)
+    output_gt_for_evaluations(args, fp_grid_gt, b_mid_list)
+    save_placement_result(args, sensor_placement,fp_grid, P,b, G)
 
 if __name__ == '__main__':
     run()
+    # args = argparser.parse_args()
+    # tempdir  = args.temp_result_dir
+    # with open(tempdir + 'b_mid_list.pickle', 'rb') as f:
+    #     b_mid_list = pickle.load(f)
+    # with open(args.temp_result_dir + 'fp_grid.pickle','rb') as f:
+    #     fp_grid = pickle.load(f)
+    
+    # bmd = get_b_mid_d_matrix(b_mid_list, fp_grid)

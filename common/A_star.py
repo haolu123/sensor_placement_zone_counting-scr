@@ -91,7 +91,7 @@ class Env:
              
         return arIntrst
           
-    def get_boundary_areas(self, grid_width):
+    def get_boundary_areas(self, grid_width, range_b):
         """
         Get the area near the boundaries
 
@@ -101,7 +101,7 @@ class Env:
             [x_low, y_low, x_high, y_high]
 
         """         
-        range_b = 200
+        # range_b = 200
         
         grid_ft_bound = copy.deepcopy(self.grid_fp)
         grid_ft_bound[grid_ft_bound!=5] = 0
@@ -120,7 +120,13 @@ class Env:
             y_l = max(stats[i+1][1]-(range_b//grid_width), 0)
             y_u = min(stats[i+1][1]+stats[i+1][3]+(range_b//grid_width),y_lim)
             bound_slices[i] = [x_l, y_l, x_u, y_u]
-        return bound_slices    
+        
+        b_mid = [[]]*(num_area-1)
+        for i in range(num_area-1):
+            x_m = stats[i+1][0] + stats[i+1][2]/2
+            y_m = stats[i+1][1] + stats[i+1][3]/2
+            b_mid[i] = [x_m, y_m]
+        return bound_slices, b_mid
         
     def get_half_neighbor(self, s):
         """

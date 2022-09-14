@@ -2,7 +2,7 @@ from common.config import argparser
 from common.read_labeled_floor_plan import Get_BaseColor,Label_gridFloorPlan,get_grid_width
 from common.engine import get_all_matrix, ILP_solver, A_star_simulation
 from common.A_star import Env
-from common.plot_utls import result_plot
+from common.plot_utls import result_plot,plot_sensor_placement
 import pickle,os
 import matplotlib.pyplot as plt
 import numpy as np
@@ -69,8 +69,27 @@ def plot_figure4(args):
     rplot.add_s_start_goal_plot()
     rplot.plot_show('Figure4.jpg')
 
+def plt_OSP(args):
+    fp_grid, _ = get_fp_grid(args)
+
+    room_width = args.room_width
+    room_length = args.room_length
+    grid_width = get_grid_width(room_width, room_length)
+    fp_img_name = args.data_dir + 'fp1_code.png'
+    with open(args.result_dir+'sensor_placement.pickle','rb') as f:
+        sp_list = pickle.load(f)
+    
+    for i in sp_list:
+        sp_2d = i.reshape(fp_grid.shape)
+        sp_where = np.where(sp_2d)
+        sensor_placement = []
+        for i in range(sp_where[0].shape[0]):
+            sensor_placement.append([sp_where[0][i], sp_where[1][i]])
+        plot_sensor_placement(fp_grid, grid_width, fp_img_name, sensor_placement)
+
 if __name__ == '__main__':
     args = argparser.parse_args()
     # plot_figure2(args)
     # plot_figure3(args)
-    plot_figure4(args)
+    # plot_figure4(args)
+    plt_OSP(args)
